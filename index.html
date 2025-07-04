@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>六角棋 (優化版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* ======================================================================== */
+        /* --- 優化點：CSS 樣式集中管理 --- */
+        /* ======================================================================== */
+        :root {
+            /* 基礎顏色 */
+            --color-background: #f3f4f6; /* bg-gray-100 */
+            --color-panel-bg: #ffffff; /* bg-white */
+            --color-status-panel-bg: #e5e7eb; /* bg-gray-200 */
+            --color-text-primary: #1f2937; /* text-gray-800 */
+            --color-text-secondary: #4b5563; /* text-gray-600 */
+            --color-text-message: #2563eb; /* text-blue-600 */
+            
+            /* 棋盤與棋子顏色 */
+            --hex-fill-color: #f0f0f0;
+            --hex-stroke-color: #d1d5db;
+            --player-white-fill: #F9F9F9;
+            --player-white-stroke: #333333;
+            --player-white-text: #333333;
+            --player-black-fill: #333333;
+            --player-black-stroke: #F0F0F0;
+            --player-black-text: #F0F0F0;
+
+            /* 提示與高亮顏色 */
+            --highlight-selection-ring: #f39c12; /* 黃色選擇框 */
+            --highlight-movable-piece: rgba(243, 156, 18, 0.7); /* 橘色可移動提示點 */
+            --highlight-valid-move: rgba(52, 152, 219, 0.5); /* 藍色移動高亮 */
+            --highlight-valid-summon: rgba(46, 204, 113, 0.5); /* 綠色召喚高亮 */
+            --highlight-stacked-piece: rgba(128, 128, 128, 0.5); /* 堆疊提示 */
+            
+            /* 按鈕顏色 */
+            --btn-a-bg: #3b82f6; --btn-a-hover: #2563eb;
+            --btn-b-bg: #22c55e; --btn-b-hover: #16a34a;
+            --btn-c-bg: #eab308; --btn-c-hover: #ca8a04;
+            --btn-d-bg: #a855f7; --btn-d-hover: #9333ea;
+            --btn-e-bg: #ef4444; --btn-e-hover: #dc2626;
+            --btn-pass-bg: #6b7280; --btn-pass-hover: #4b5563;
+            --btn-reset-bg: #6366f1; --btn-reset-hover: #4f46e5;
+            --btn-disabled-bg: #9ca3af;
+            --btn-text-color: #ffffff;
+            
+            /* 尺寸與其他 */
+            --selection-ring-width: 4;
+            --piece-stroke-width: 2;
+        }
+
+        body {
+            font-family: 'Noto Sans TC', 'Inter', sans-serif;
+            touch-action: manipulation;
+            background-color: var(--color-background);
+        }
+        .control-panel {
+            background-color: var(--color-panel-bg);
+        }
+        .status-panel {
+            background-color: var(--color-status-panel-bg);
+            color: var(--color-text-secondary);
+        }
+        .status-panel .font-bold {
+            color: var(--color-text-primary);
+        }
+        #gameMessage {
+            color: var(--color-text-message);
+        }
+
+        .hex-grid {
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1)) drop-shadow(0 2px 4px rgba(0,0,0,0.06));
+        }
+        
+        .btn {
+            color: var(--btn-text-color);
+            font-weight: bold;
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            transition: background-color 0.2s;
+            text-align: center;
+        }
+        .btn:disabled {
+            background-color: var(--btn-disabled-bg);
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        
+        .summon-btn[data-type="A"] { background-color: var(--btn-a-bg); }
+        .summon-btn[data-type="A"]:not(:disabled):hover { background-color: var(--btn-a-hover); }
+        .summon-btn[data-type="B"] { background-color: var(--btn-b-bg); }
+        .summon-btn[data-type="B"]:not(:disabled):hover { background-color: var(--btn-b-hover); }
+        .summon-btn[data-type="C"] { background-color: var(--btn-c-bg); }
+        .summon-btn[data-type="C"]:not(:disabled):hover { background-color: var(--btn-c-hover); }
+        .summon-btn[data-type="D"] { background-color: var(--btn-d-bg); }
+        .summon-btn[data-type="D"]:not(:disabled):hover { background-color: var(--btn-d-hover); }
+        .summon-btn[data-type="E"] { background-color: var(--btn-e-bg); }
+        .summon-btn[data-type="E"]:not(:disabled):hover { background-color: var(--btn-e-hover); }
+        
+        #pass-btn { background-color: var(--btn-pass-bg); }
+        #pass-btn:not(:disabled):hover { background-color: var(--btn-pass-hover); }
+        #reset-btn { background-color: var(--btn-reset-bg); }
+        #reset-btn:not(:disabled):hover { background-color: var(--btn-reset-hover); }
+
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-5xl mx-auto flex flex-col lg:flex-row gap-4">
+        
+        <div class="flex-grow flex flex-col items-center justify-center">
+            <canvas id="gameCanvas" class="hex-grid rounded-lg"></canvas>
+        </div>
+
+        <div class="w-full lg:w-80 control-panel p-4 rounded-lg shadow-lg flex flex-col gap-4">
+            <h1 class="text-2xl font-bold text-center text-gray-800">六角棋</h1>
+            
+            <div class="status-panel text-center p-3 rounded-lg">
+                <p class="text-lg font-semibold text-gray-700">輪到: <span id="currentPlayer" class="font-bold"></span></p>
+                <p class="text-sm">總回合: <span id="turnCounter">0</span></p>
+                <p id="gameMessage" class="mt-2 font-medium h-16"></p> </div>
+
+            <div id="summon-panel">
+                <h2 class="text-lg font-semibold mb-2 text-gray-700">召喚棋子</h2>
+                <div class="grid grid-cols-2 gap-2">
+                    <button data-type="A" class="btn summon-btn">A棋 (<span id="count-A">0/1</span>)</button>
+                    <button data-type="B" class="btn summon-btn">B棋 (<span id="count-B">0/2</span>)</button>
+                    <button data-type="C" class="btn summon-btn">C棋 (<span id="count-C">0/2</span>)</button>
+                    <button data-type="D" class="btn summon-btn">D棋 (<span id="count-D">0/2</span>)</button>
+                    <button data-type="E" class="btn summon-btn">E棋 (<span id="count-E">0/3</span>)</button>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <button id="pass-btn" class="btn hidden">PASS 回合</button>
+                <button id="reset-btn" class="btn">重新開始</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // ========================================================================
+    // --- 1. CONFIGURATION, CONSTANTS & HELPERS ---
+    // ========================================================================
+    
+    // --- 優化點：除錯模式開關 ---
+    // 設為 true 可在畫面和控制台看到更多遊戲狀態資訊，方便追蹤問題
+    const DEBUG_MODE = true;
+
+    // --- 優化點：從 CSS 讀取樣式變數的輔助函式 ---
+    const getCssVar = (varName) => getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+
+    const CONFIG = {
+        // --- 重要：設計師請在此處調整棋盤基礎大小 ---
+        // HEX_SIZE: 每個六邊形從中心到角落的半徑
+        // BOARD_RADIUS: 棋盤從中心到最外層的六邊形層數
+        HEX_SIZE: 35,
+        BOARD_RADIUS: 5,
+        // --- 樣式設定已移至 CSS，此處儲存 CSS 變數名稱 ---
+        PLAYERS: {
+            'white': { 
+                name: '白方', 
+                color: getCssVar('--player-white-fill'), 
+                stroke: getCssVar('--player-white-stroke'), 
+                text: getCssVar('--player-white-text') 
+            },
+            'black': { 
+                name: '黑方', 
+                color: getCssVar('--player-black-fill'), 
+                stroke: getCssVar('--player-black-stroke'), 
+                text: getCssVar('--player-black-text') 
+            }
+        },
+        PIECE_LIMITS: { 'A': 1, 'B': 2, 'C': 2, 'D': 2, 'E': 3 },
+        GAME_STATES: {
+            AWAITING_INPUT: 'AWAITING_INPUT',
+            PIECE_SELECTED: 'PIECE_SELECTED',
+            SUMMONING: 'SUMMONING',
+            GAME_OVER: 'GAME_OVER'
+        }
+    };
+
+    // ========================================================================
+    // --- 2. HEXAGONAL COORDINATE SYSTEM ---
+    // (此處無改動)
+    // ========================================================================
+    class Hex {
+        constructor(q, r) {
+            this.q = q;
+            this.r = r;
+            this.s = -q - r;
+        }
+
+        static directions = [
+            new Hex(1, 0), new Hex(1, -1), new Hex(0, -1),
+            new Hex(-1, 0), new Hex(-1, 1), new Hex(0, 1)
+        ];
+
+        toKey() { return `${this.q},${this.r}`; }
+        
+        static fromKey(key) {
+            const [q, r] = key.split(',').map(Number);
+            return new Hex(q, r);
+        }
+
+        equals(other) {
+            if (!other) return false;
+            return this.q === other.q && this.r === other.r;
+        }
+
+        add(other) { return new Hex(this.q + other.q, this.r + other.r); }
+        neighbor(direction) { return this.add(Hex.directions[direction]); }
+        neighbors() { return Hex.directions.map((dir, i) => this.neighbor(i)); }
+        distance(other) { return (Math.abs(this.q - other.q) + Math.abs(this.r - other.r) + Math.abs(this.s - other.s)) / 2; }
+    }
+
+    // ========================================================================
+    // --- 3. GAME RULES ENGINE ---
+    // (此處無邏輯改動，僅增加註解)
+    // ========================================================================
+~    class Rules {
+    constructor(getState) {
+        this.getState = getState;
+    }
+    isHiveConnected(pieceMap) {
+        if (pieceMap.size <= 1) return true;
+        const visited = new Set();
+        const queue = [];
+        const firstPieceKey = pieceMap.keys().next().value;
+        queue.push(Hex.fromKey(firstPieceKey));
+        visited.add(firstPieceKey);
+        let count = 0;
+        while (queue.length > 0) {
+            const current = queue.shift();
+            count++;
+            current.neighbors().forEach(neighbor => {
+                const key = neighbor.toKey();
+                if (pieceMap.has(key) && !visited.has(key)) {
+                    visited.add(key);
+                    queue.push(neighbor);
+                }
+            });
+        }
+        return count === pieceMap.size;
+    }
+    isMoveBreakingHive(pieceHex) {
+        const { board } = this.getState();
+        if (board.size <= 2) return false;
+        const tempBoard = new Map(board);
+        const pieceStack = tempBoard.get(pieceHex.toKey());
+        if (pieceStack && pieceStack.length > 1) {
+            return false;
+        }
+        tempBoard.delete(pieceHex.toKey());
+        return !this.isHiveConnected(tempBoard);
+    }
+    isTrappedSpace(hex) {
+        const { board } = this.getState();
+        const neighbors = hex.neighbors();
+        const occupiedNeighbors = neighbors.filter(n => board.has(n.toKey()));
+        return occupiedNeighbors.length >= 5;
+    }
+    checkWinCondition() {
+        const { board } = this.getState();
+        for (const player of Object.keys(CONFIG.PLAYERS)) {
+            const opponent = player === 'white' ? 'black' : 'white';
+            const aPieceEntry = [...board.entries()].find(([k, stack]) => {
+                const topPiece = stack[stack.length - 1];
+                return topPiece.type === 'A' && topPiece.player === opponent;
+            });
+            if (aPieceEntry) {
+                const hex = Hex.fromKey(aPieceEntry[0]);
+                const isSurrounded = hex.neighbors().every(n => board.has(n.toKey()));
+                if (isSurrounded) {
+                    return player;
+                }
+            }
+        }
+        return null;
+    }
+    canSlide(startHex, endHex) {
+        const { board } = this.getState();
+        if (startHex.distance(endHex) !== 1) {
+            return false;
+        }
+        const commonNeighbors = startHex.neighbors().filter(sn => 
+            endHex.neighbors().some(en => en.equals(sn))
+        );
+        if (commonNeighbors.length !== 2) {
+            return false; 
+        }
+        const gate1_occupied = board.has(commonNeighbors[0].toKey());
+        const gate2_occupied = board.has(commonNeighbors[1].toKey());
+        return !(gate1_occupied && gate2_occupied);
+    }
+    findAdjacentSlideMoves(startHex) {
+        return startHex.neighbors().filter(neighbor => this.canSlide(startHex, neighbor));
+    }
+    findAllReachableSlideMoves(startHex) {
+        const { board } = this.getState();
+        const destinations = [];
+        const queue = [startHex];
+        const visited = new Set([startHex.toKey()]);
+        const tempBoard = new Map(board);
+        tempBoard.delete(startHex.toKey());
+        while (queue.length > 0) {
+            const currentHex = queue.shift();
+            for (const neighbor of currentHex.neighbors()) {
+                const neighborKey = neighbor.toKey();
+                if (!visited.has(neighborKey) && !tempBoard.has(neighborKey) && this.canSlide(currentHex, neighbor)) {
+                    visited.add(neighborKey);
+                    queue.push(neighbor);
+                    destinations.push(neighbor);
+                }
+            }
+        }
+        return destinations;
+    }
+    findExactSlideSteps(startHex, steps, board) {
+        const destinations = new Set();
+        const queue = [{ hex: startHex, step: 0 }];
+        const visited = new Map([[startHex.toKey(), 0]]);
+        while(queue.length > 0) {
+            const { hex, step } = queue.shift();
+            if (step === steps) {
+                destinations.add(hex.toKey());
+                continue;
+            }
+            if (step > steps) {
+                continue;
+            }
+            for (const neighbor of hex.neighbors()) {
+                const key = neighbor.toKey();
+                if (!board.has(key) && this.canSlide(hex, neighbor) && (!visited.has(key) || visited.get(key) > step + 1)) {
+                    visited.set(key, step + 1);
+                    queue.push({ hex: neighbor, step: step + 1 });
+                }
+            }
+        }
+        return Array.from(destinations).map(key => Hex.fromKey(key));
+    }
+    getDJump(startHex) {
+        const { board, grid } = this.getState();
+        const moves = [];
+        const allDirections = Hex.directions;
+        for (const dir of allDirections) {
+            let hasJumpedOverPiece = false;
+            let current = startHex.add(dir);
+            while (grid.has(current.toKey())) {
+                const isOccupied = board.has(current.toKey());
+                if (isOccupied) {
+                    hasJumpedOverPiece = true;
+                } else {
+                    if (hasJumpedOverPiece) {
+                        moves.push(current);
+                        break; 
+                    } else {
+                        break;
+                    }
+                }
+                current = current.add(dir);
+            }
+        }
+        return moves;
+    }
+    getValidMovesForPiece(piece, hex) {
+        const { type } = piece;
+        let potentialMoves = [];
+        if (this.isMoveBreakingHive(hex)) {
+            return [];
+        }
+        switch (type) {
+            case 'A':
+                potentialMoves = this.findAdjacentSlideMoves(hex);
+                break;
+            case 'B':
+                potentialMoves = this.findAdjacentSlideMoves(hex);
+                break;
+            case 'C':
+                const { board } = this.getState();
+                const tempBoard = new Map(board);
+                tempBoard.delete(hex.toKey());
+                potentialMoves = this.findExactSlideSteps(hex, 3, tempBoard);
+                break;
+            case 'D':
+                potentialMoves = this.getDJump(hex);
+                break;
+            case 'E':
+                potentialMoves = this.findAllReachableSlideMoves(hex);
+                break;
+        }
+        return this.filterMoves(potentialMoves, piece, hex);
+    }
+    filterMoves(moves, piece, originHex) { // <-- 接收 originHex
+        const { board } = this.getState();
+
+        // 建立一個臨時棋盤，模擬棋子從 originHex 被拿起後的狀態
+        const tempBoard = new Map(board);
+        const originStack = tempBoard.get(originHex.toKey());
+        // 只有當該位置只有一顆棋子時才刪除，如果是在別的棋子上面移動，則不需刪除底下的
+        if (originStack && originStack.length === 1) {
+            tempBoard.delete(originHex.toKey());
+        }
+
+        return moves.filter(moveHex => {
+            if (!this.getState().grid.has(moveHex.toKey())) return false;
+            
+            // ======================= 新增的核心檢查 =======================
+            // 檢查目的地 (moveHex) 的周圍，是否有任何棋子存在於 "臨時棋盤" 上
+            const isAdjacentToHive = moveHex.neighbors().some(n => tempBoard.has(n.toKey()));
+            
+            // 如果目的地不與蜂巢相鄰，這是一個無效的移動
+            if (!isAdjacentToHive) {
+                // 例外：如果棋盤上只有一顆棋子，當然沒有東西可以相鄰
+                // 這個情況通常在 isMoveBreakingHive 已經處理了，但多一層保護更好
+                if (board.size > 2) { // 假設 board.size > 2 才需嚴格檢查
+                    return false;
+                }
+            }
+            // ============================================================
+
+            const targetStack = board.get(moveHex.toKey());
+            
+            // 對於甲蟲 'B'，它可以移動到被佔據的格子，但我們仍然需要上面的 isAdjacentToHive 檢查
+            if (piece.type === 'B') {
+                return true; // 甲蟲的規則比較特殊，但保持與蜂巢相連的規則依然適用
+            }
+
+            if (targetStack) return false; // 不能移動到已被佔據的格子 (非甲蟲)
+
+            if (['A', 'C', 'E'].includes(piece.type) && this.isTrappedSpace(moveHex)) {
+                return false;
+            }
+            
+            return true;
+        });
+    }
+    getValidSummonLocations() {
+        const { board, grid, turn, currentPlayer } = this.getState();
+        const validHexes = new Map();
+        if (board.size === 0) {
+            return [...grid.values()];
+        }
+        if (board.size === 1 && turn === 1) {
+            const whitePieceHex = Hex.fromKey(board.keys().next().value);
+            return whitePieceHex.neighbors().filter(n => grid.has(n.toKey()));
+        }
+        const playerPieces = [...board.entries()].filter(([, stack]) => stack[stack.length - 1].player === currentPlayer);
+        playerPieces.forEach(([key]) => {
+            const hex = Hex.fromKey(key);
+            hex.neighbors().forEach(neighbor => {
+                if (grid.has(neighbor.toKey()) && !board.has(neighbor.toKey())) {
+                    const isAdjacentToOpponent = neighbor.neighbors().some(n => {
+                        const pStack = board.get(n.toKey());
+                        return pStack && pStack[pStack.length-1].player !== currentPlayer;
+                    });
+                    if (!isAdjacentToOpponent) {
+                        validHexes.set(neighbor.toKey(), neighbor);
+                    }
+                }
+            });
+        });
+        return [...validHexes.values()];
+    }
+    }
+
+    // ========================================================================
+    // --- 4. UI / RENDERER ---
+    // (重構以使用 CSS 變數)
+    // ========================================================================
+    class UI {
+        constructor(game) {
+            this.game = game;
+            this.canvas = document.getElementById('gameCanvas');
+            this.ctx = this.canvas.getContext('2d');
+            this.elements = {
+                currentPlayer: document.getElementById('currentPlayer'),
+                turnCounter: document.getElementById('turnCounter'),
+                gameMessage: document.getElementById('gameMessage'),
+                summonPanel: document.getElementById('summon-panel'),
+                passBtn: document.getElementById('pass-btn'),
+                resetBtn: document.getElementById('reset-btn')
+            };
+            this.attachEventListeners();
+        }
+
+        attachEventListeners() {
+            window.addEventListener('resize', () => this.resizeAndDraw());
+            this.canvas.addEventListener('click', (e) => this.handleCanvasClick(e));
+            this.elements.resetBtn.addEventListener('click', () => this.game.init());
+            this.elements.passBtn.addEventListener('click', () => this.game.passTurn());
+            this.elements.summonPanel.addEventListener('click', (e) => {
+                const btn = e.target.closest('.summon-btn');
+                if (btn && !btn.disabled) {
+                    this.game.startSummoning(btn.dataset.type);
+                }
+            });
+        }
+
+        handleCanvasClick(event) {
+            const rect = this.canvas.getBoundingClientRect();
+            const scaleX = this.canvas.width / rect.width;
+            const scaleY = this.canvas.height / rect.height;
+            const canvasX = (event.clientX - rect.left) * scaleX;
+            const canvasY = (event.clientY - rect.top) * scaleY;
+            const transform = this.ctx.getTransform();
+            const worldX = (canvasX - transform.e) / transform.a;
+            const worldY = (canvasY - transform.f) / transform.d;
+            const clickedHex = this.pixelToHex(worldX, worldY);
+            this.game.handleHexClick(clickedHex);
+        }
+        
+        resizeAndDraw() {
+            const state = this.game.getState();
+            if (!state || !state.grid) return;
+            const container = this.canvas.parentElement;
+            const availableHeight = window.innerHeight * 0.8;
+            const size = Math.min(container.clientWidth, availableHeight);
+            const boardWidth = (2 * CONFIG.BOARD_RADIUS + 1) * CONFIG.HEX_SIZE * Math.sqrt(3);
+            const boardHeight = (2 * CONFIG.BOARD_RADIUS + 1) * CONFIG.HEX_SIZE * 1.5;
+            const scale = Math.min(size / boardWidth, size / boardHeight) * 0.95;
+            this.canvas.width = size;
+            this.canvas.height = size;
+            this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+            this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
+            this.ctx.scale(scale, scale);
+            this.draw();
+        }
+
+        draw() {
+            const state = this.game.getState();
+            if (!state || !state.grid) return;
+            const transform = this.ctx.getTransform();
+            this.ctx.clearRect(-this.canvas.width / 2 / transform.a, -this.canvas.height / 2 / transform.d, this.canvas.width/transform.a, this.canvas.height/transform.d);
+            this.drawGrid(state.grid);
+            this.drawHighlights(state);
+            this.drawMovablePieceHints(state);
+            this.drawPieces(state.board);
+            this.drawSelection(state);
+        }
+
+        drawGrid(grid) {
+            grid.forEach(hex => {
+                this.drawHex(hex, getCssVar('--hex-fill-color'), getCssVar('--hex-stroke-color'));
+            });
+        }
+        
+        drawHighlights(state) {
+            const { validMoves, gameState } = state;
+            if (validMoves.length > 0) {
+                const color = gameState === CONFIG.GAME_STATES.SUMMONING 
+                    ? getCssVar('--highlight-valid-summon') 
+                    : getCssVar('--highlight-valid-move');
+                validMoves.forEach(hex => {
+                    const { x, y } = this.hexToPixel(hex);
+                    this.ctx.beginPath();
+                    this.ctx.arc(x, y, CONFIG.HEX_SIZE * 0.4, 0, 2 * Math.PI);
+                    this.ctx.fillStyle = color;
+                    this.ctx.fill();
+                });
+            }
+        }
+
+        drawMovablePieceHints(state) {
+            const { allPossibleMoves, gameState } = state;
+            if (gameState === CONFIG.GAME_STATES.AWAITING_INPUT && allPossibleMoves.size > 0) {
+                for (const hexKey of allPossibleMoves.keys()) {
+                    const hex = Hex.fromKey(hexKey);
+                    const { x, y } = this.hexToPixel(hex);
+                    this.ctx.beginPath();
+                    this.ctx.arc(x, y, CONFIG.HEX_SIZE * 0.3, 0, 2 * Math.PI);
+                    this.ctx.fillStyle = getCssVar('--highlight-movable-piece');
+                    this.ctx.fill();
+                }
+            }
+        }
+
+        drawPieces(board) {
+            board.forEach((stack, key) => {
+                const hex = Hex.fromKey(key);
+                const topPiece = stack[stack.length - 1];
+                this.drawPiece(topPiece, hex, stack.length > 1);
+            });
+        }
+        
+        drawSelection(state) {
+            if (state.selectedPieceHex) {
+                this.drawHex(state.selectedPieceHex, 'transparent', getCssVar('--highlight-selection-ring'), getCssVar('--selection-ring-width'));
+            }
+        }
+
+        drawHex(hex, fill, stroke, lineWidth = 1) {
+            const { x, y } = this.hexToPixel(hex);
+            this.ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle = 2 * Math.PI / 6 * (i + 0.5);
+                const px = x + CONFIG.HEX_SIZE * Math.cos(angle);
+                const py = y + CONFIG.HEX_SIZE * Math.sin(angle);
+                if (i === 0) this.ctx.moveTo(px, py);
+                else this.ctx.lineTo(px, py);
+            }
+            this.ctx.closePath();
+            this.ctx.fillStyle = fill;
+            this.ctx.strokeStyle = stroke;
+            this.ctx.lineWidth = lineWidth;
+            this.ctx.fill();
+            this.ctx.stroke();
+        }
+        
+        drawPiece(piece, hex, isStacked) {
+            const { x, y } = this.hexToPixel(hex);
+            const playerStyle = CONFIG.PLAYERS[piece.player];
+            
+            if (isStacked) {
+                this.ctx.beginPath();
+                this.ctx.arc(x, y, CONFIG.HEX_SIZE * 0.8, 0, 2 * Math.PI);
+                this.ctx.fillStyle = getCssVar('--highlight-stacked-piece');
+                this.ctx.fill();
+            }
+
+            this.ctx.beginPath();
+            this.ctx.arc(x, y, CONFIG.HEX_SIZE * 0.7, 0, 2 * Math.PI);
+            this.ctx.fillStyle = playerStyle.color;
+            this.ctx.fill();
+            this.ctx.strokeStyle = playerStyle.stroke;
+            this.ctx.lineWidth = getCssVar('--piece-stroke-width');
+            this.ctx.stroke();
+            
+            this.ctx.fillStyle = playerStyle.text;
+            this.ctx.font = `bold ${CONFIG.HEX_SIZE * 0.8}px 'Noto Sans TC', Arial`;
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(piece.type, x, y);
+        }
+
+        update() {
+            const state = this.game.getState();
+            const { currentPlayer, turn, gameState, winner, playerTurns, aPieceSummoned, pieceCounts, isSummoningType } = state;
+            this.elements.turnCounter.textContent = turn;
+            
+            this.elements.gameMessage.innerHTML = this.getGameMessage(state);
+            
+            if (gameState === CONFIG.GAME_STATES.GAME_OVER) {
+                this.elements.currentPlayer.textContent = '-';
+            } else {
+                this.elements.currentPlayer.textContent = CONFIG.PLAYERS[currentPlayer].name;
+                this.elements.currentPlayer.style.color = CONFIG.PLAYERS[currentPlayer].text;
+                // Since black text on black bg is invisible, let's fix it for the UI
+                this.elements.currentPlayer.style.backgroundColor = CONFIG.PLAYERS[currentPlayer].color;
+            }
+            const turnsTaken = playerTurns[currentPlayer];
+            const mustSummonA = (turnsTaken === 3 && !aPieceSummoned[currentPlayer]);
+            for (const type in CONFIG.PIECE_LIMITS) {
+                const btn = this.elements.summonPanel.querySelector(`[data-type="${type}"]`);
+                const countSpan = btn.querySelector('span');
+                const currentCount = pieceCounts[currentPlayer][type];
+                const limit = CONFIG.PIECE_LIMITS[type];
+                countSpan.textContent = `${currentCount}/${limit}`;
+                let isDisabled = currentCount >= limit || gameState === CONFIG.GAME_STATES.GAME_OVER;
+                if (mustSummonA) {
+                    isDisabled = (type !== 'A') || isDisabled;
+                }
+                btn.disabled = isDisabled;
+                const isActiveSummon = gameState === CONFIG.GAME_STATES.SUMMONING && type === isSummoningType;
+                btn.classList.toggle('ring-4', isActiveSummon);
+                btn.classList.toggle('ring-green-400', isActiveSummon);
+            }
+            const { canMove, canSummon } = this.game.checkPlayerActions();
+            this.elements.passBtn.classList.toggle('hidden', gameState === CONFIG.GAME_STATES.GAME_OVER || canMove || canSummon);
+            this.draw();
+        }
+
+        getGameMessage(state) {
+            const { gameState, currentPlayer, turn, board, playerTurns, aPieceSummoned, isSummoningType, selectedPieceHex } = state;
+            
+            let message = "";
+            if (gameState === CONFIG.GAME_STATES.GAME_OVER) {
+                 message = `${CONFIG.PLAYERS[state.winner].name} 獲勝！`;
+            } else if (turn === 1) {
+                if (currentPlayer === 'white' && board.size === 0) message = "白方首次召喚：請選擇棋子並放置在任意空位。";
+                else if (currentPlayer === 'black' && board.size === 1) message = "黑方首次召喚：請選擇棋子並放置在白棋旁。";
+            } else if (playerTurns[currentPlayer] === 3 && !aPieceSummoned[currentPlayer]) {
+                message = "最後機會：本回合必須召喚 A 棋！";
+            } else if (!aPieceSummoned[currentPlayer] && playerTurns[currentPlayer] < 4) {
+                message = "請召喚棋子 (前4回合內必須召喚A棋)。";
+            } else {
+                 const { canMove, canSummon } = this.game.checkPlayerActions();
+                 if (!canMove && !canSummon) {
+                    message = "無任何可執行動作，請按 PASS 結束回合。";
+                 } else {
+                     switch(gameState) {
+                        case CONFIG.GAME_STATES.SUMMONING:
+                            message = `召喚模式：請點擊綠色高亮區域放置 ${isSummoningType} 棋。`;
+                            break;
+                        case CONFIG.GAME_STATES.PIECE_SELECTED:
+                            message = "移動模式：請點擊藍色高亮區移動，或點擊原棋子取消選擇。";
+                            break;
+                        case CONFIG.GAME_STATES.AWAITING_INPUT:
+                        default:
+                            message = "請點擊帶有橘點的棋子移動，或召喚新棋子。";
+                     }
+                 }
+            }
+            
+            // --- 優化點：顯示除錯資訊 ---
+            if(DEBUG_MODE) {
+                message += `<br/><span class="text-xs text-red-500">DEBUG: ${gameState} | Sel: ${selectedPieceHex?.toKey() || 'null'}</span>`;
+            }
+            return message;
+        }
+        
+        hexToPixel(hex) {
+            const x = CONFIG.HEX_SIZE * (Math.sqrt(3) * hex.q + Math.sqrt(3) / 2 * hex.r);
+            const y = CONFIG.HEX_SIZE * (3 / 2 * hex.r);
+            return { x, y };
+        }
+
+        pixelToHex(x, y) {
+            const q = (Math.sqrt(3) / 3 * x - 1 / 3 * y) / CONFIG.HEX_SIZE;
+            const r = (2 / 3 * y) / CONFIG.HEX_SIZE;
+            const s = -q - r;
+            let rq = Math.round(q);
+            let rr = Math.round(r);
+            let rs = Math.round(s);
+            const q_diff = Math.abs(rq - q);
+            const r_diff = Math.abs(rr - r);
+            const s_diff = Math.abs(rs - s);
+            if (q_diff > r_diff && q_diff > s_diff) {
+                rq = -rr - rs;
+            } else if (r_diff > s_diff) {
+                rr = -rq - rs;
+            }
+            const key = `${rq},${rr}`;
+            return this.game.getState().grid.get(key) || null;
+        }
+    }
+
+    // ========================================================================
+    // --- 5. GAME LOGIC ---
+    // (加入更多 Console Log)
+    // ========================================================================
+    class Game {
+        constructor() {
+            this.ui = new UI(this);
+            this.rules = new Rules(() => this.state);
+            this.init();
+        }
+
+        init() {
+            if (DEBUG_MODE) console.log("--- GAME INIT ---");
+            this.state = this.createInitialState();
+            this.updateAllPossibleMoves();
+            this.ui.resizeAndDraw();
+            this.ui.update();
+        }
+
+        createInitialState() {
+            const state = {
+                grid: new Map(), board: new Map(), currentPlayer: 'white', turn: 1,
+                playerTurns: { white: 0, black: 0 }, aPieceSummoned: { white: false, black: false },
+                pieceCounts: { white: {}, black: {} }, gameState: CONFIG.GAME_STATES.AWAITING_INPUT,
+                selectedPieceHex: null, validMoves: [], allPossibleMoves: new Map(),
+                isSummoningType: null, winner: null
+            };
+            Object.keys(CONFIG.PIECE_LIMITS).forEach(type => {
+                state.pieceCounts.white[type] = 0;
+                state.pieceCounts.black[type] = 0;
+            });
+            for (let q = -CONFIG.BOARD_RADIUS; q <= CONFIG.BOARD_RADIUS; q++) {
+                for (let r = Math.max(-CONFIG.BOARD_RADIUS, -q - CONFIG.BOARD_RADIUS); r <= Math.min(CONFIG.BOARD_RADIUS, -q + CONFIG.BOARD_RADIUS); r++) {
+                    const hex = new Hex(q, r);
+                    state.grid.set(hex.toKey(), hex);
+                }
+            }
+            return state;
+        }
+
+        getState() {
+            return this.state;
+        }
+        
+        handleHexClick(clickedHex) {
+            if (!clickedHex) return; // 點擊到棋盤外
+            if (this.state.gameState === CONFIG.GAME_STATES.GAME_OVER) return;
+            if (DEBUG_MODE) console.log(`[Input] Clicked ${clickedHex.toKey()}. Current state: ${this.state.gameState}`);
+
+            if (this.state.gameState === CONFIG.GAME_STATES.SUMMONING) {
+                if (this.state.validMoves.some(h => h.equals(clickedHex))) {
+                    this.summonPiece(clickedHex, this.state.isSummoningType);
+                    this.endTurn();
+                } else {
+                    if (DEBUG_MODE) console.log("[Action] Invalid summon location. Cancelling summon mode.");
+                    this.resetSelection();
+                    this.ui.update();
+                }
+                return;
+            }
+            
+            if (this.state.gameState === CONFIG.GAME_STATES.PIECE_SELECTED) {
+                const isValidMove = this.state.validMoves.some(h => h.equals(clickedHex));
+                const isClickingSelf = clickedHex.equals(this.state.selectedPieceHex);
+
+                if (isClickingSelf) {
+                    if (DEBUG_MODE) console.log("[Action] Clicked self. Cancelling selection.");
+                    this.resetSelection();
+                } else if (isValidMove) {
+                    this.movePiece(this.state.selectedPieceHex, clickedHex);
+                    this.endTurn();
+                } else {
+                    if (DEBUG_MODE) console.log("[Action] Clicked invalid location. Cancelling selection.");
+                    this.resetSelection();
+                }
+                this.ui.update();
+                return;
+            }
+            
+            if (this.state.gameState === CONFIG.GAME_STATES.AWAITING_INPUT) {
+                const pieceStack = this.state.board.get(clickedHex.toKey());
+                if (pieceStack) {
+                    const topPiece = pieceStack[pieceStack.length - 1];
+                    if (topPiece.player === this.state.currentPlayer) {
+                        this.selectPiece(clickedHex);
+                    }
+                }
+            }
+        }
+        
+        selectPiece(hex) {
+            const hexKey = hex.toKey();
+            const validMoves = this.state.allPossibleMoves.get(hexKey);
+
+            if (validMoves && validMoves.length > 0) {
+                if (DEBUG_MODE) console.log(`[State Change] Selecting piece at ${hexKey}. Moves found: ${validMoves.length}. New state: PIECE_SELECTED`);
+                this.state.gameState = CONFIG.GAME_STATES.PIECE_SELECTED;
+                this.state.selectedPieceHex = hex;
+                this.state.validMoves = validMoves;
+                this.ui.update();
+            } else {
+                 if (DEBUG_MODE) console.log(`[Info] Clicked piece at ${hexKey}, but it has no valid moves.`);
+            }
+        }
+        
+        startSummoning(type) {
+            if (DEBUG_MODE) console.log(`[Action] Attempting to start summon for type: ${type}`);
+            const { playerTurns, aPieceSummoned, currentPlayer } = this.state;
+            if (playerTurns[currentPlayer] === 3 && !aPieceSummoned[currentPlayer] && type !== 'A') {
+                if (DEBUG_MODE) console.warn("[Rule] Blocked summon: Must summon 'A' piece now.");
+                return;
+            }
+            const validLocations = this.rules.getValidSummonLocations();
+            if (validLocations.length > 0) {
+                if (DEBUG_MODE) console.log(`[State Change] Entering summon mode. Locations found: ${validLocations.length}. New state: SUMMONING`);
+                this.resetSelection();
+                this.state.gameState = CONFIG.GAME_STATES.SUMMONING;
+                this.state.isSummoningType = type;
+                this.state.validMoves = validLocations;
+            } else {
+                 if (DEBUG_MODE) console.warn("[Rule] No valid summon locations found.");
+                alert("沒有可以召喚的位置！");
+            }
+            this.ui.update();
+        }
+        
+        summonPiece(hex, type) {
+            if (DEBUG_MODE) console.log(`[Action] Summoning ${type} at ${hex.toKey()}`);
+            const { currentPlayer } = this.state;
+            const newPiece = { type, player: currentPlayer };
+            this.state.board.set(hex.toKey(), [newPiece]);
+            this.state.pieceCounts[currentPlayer][type]++;
+            if (type === 'A') {
+                this.state.aPieceSummoned[currentPlayer] = true;
+            }
+        }
+        
+        movePiece(fromHex, toHex) {
+            if (DEBUG_MODE) console.log(`[Action] Moving piece from ${fromHex.toKey()} to ${toHex.toKey()}`);
+            const fromKey = fromHex.toKey();
+            const toKey = toHex.toKey();
+            const pieceStack = this.state.board.get(fromKey);
+            const movingPiece = pieceStack.pop();
+            if (pieceStack.length === 0) {
+                this.state.board.delete(fromKey);
+            }
+            if (movingPiece.type === 'B' && this.state.board.has(toKey)) {
+                const targetStack = this.state.board.get(toKey);
+                targetStack.push(movingPiece);
+            } else {
+                this.state.board.set(toKey, [movingPiece]);
+            }
+        }
+
+        endTurn() {
+            if (DEBUG_MODE) console.log(`--- END TURN (Player: ${this.state.currentPlayer}) ---`);
+            this.state.playerTurns[this.state.currentPlayer]++;
+            const winner = this.rules.checkWinCondition();
+            if (winner) {
+                if (DEBUG_MODE) console.log(`[State Change] Game Over! Winner: ${winner}`);
+                this.state.gameState = CONFIG.GAME_STATES.GAME_OVER;
+                this.state.winner = winner;
+            } else {
+                const oldPlayer = this.state.currentPlayer;
+                this.state.currentPlayer = oldPlayer === 'white' ? 'black' : 'white';
+                if (this.state.currentPlayer === 'white') {
+                    this.state.turn++;
+                }
+                if (DEBUG_MODE) console.log(`[State Change] Switching player to ${this.state.currentPlayer}. New Turn: ${this.state.turn}`);
+                this.resetSelection();
+            }
+            this.ui.update();
+        }
+        
+        passTurn() {
+            const { canMove, canSummon } = this.checkPlayerActions();
+            if (!canMove && !canSummon) {
+                if (DEBUG_MODE) console.log("[Action] Passing turn.");
+                this.endTurn();
+            }
+        }
+        
+        resetSelection() {
+            if (DEBUG_MODE) console.log(`[State Change] Resetting selection. New state: AWAITING_INPUT`);
+            this.state.gameState = CONFIG.GAME_STATES.AWAITING_INPUT;
+            this.state.selectedPieceHex = null;
+            this.state.validMoves = [];
+            this.state.isSummoningType = null;
+            this.updateAllPossibleMoves();
+        }
+        
+        updateAllPossibleMoves() {
+            const { currentPlayer, board, aPieceSummoned, playerTurns } = this.state;
+            this.state.allPossibleMoves.clear(); 
+            if (!aPieceSummoned[currentPlayer] && playerTurns[currentPlayer] < 4) {
+                 if (DEBUG_MODE) console.log("[Info] Movement calculation skipped: Must summon 'A' piece first.");
+                return;
+            }
+            const playerPieces = [...board.entries()].filter(([k, stack]) => stack[stack.length - 1].player === currentPlayer);
+            for (const [key, stack] of playerPieces) {
+                const topPiece = stack[stack.length - 1];
+                const hex = Hex.fromKey(key);
+                const validMoves = this.rules.getValidMovesForPiece(topPiece, hex);
+                if (validMoves.length > 0) {
+                    this.state.allPossibleMoves.set(key, validMoves);
+                }
+            }
+             if (DEBUG_MODE) console.log(`[Info] Calculated possible moves for ${currentPlayer}. Found ${this.state.allPossibleMoves.size} movable pieces.`);
+        }
+
+        checkPlayerActions() {
+            const { currentPlayer, pieceCounts } = this.state;
+            const canMove = this.state.allPossibleMoves.size > 0;
+            let canSummon = false;
+            const hasPieceToSummon = Object.keys(CONFIG.PIECE_LIMITS).some(type => pieceCounts[currentPlayer][type] < CONFIG.PIECE_LIMITS[type]);
+            if (hasPieceToSummon && this.rules.getValidSummonLocations().length > 0) {
+                canSummon = true;
+            }
+            return { canMove, canSummon };
+        }
+    }
+
+    // --- 啟動遊戲 ---
+    const game = new Game();
+
+    </script>
+</body>
+</html>
