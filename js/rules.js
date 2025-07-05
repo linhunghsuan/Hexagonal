@@ -82,6 +82,24 @@ export default class Rules {
         return !(gate1_occupied && gate2_occupied);
     }
 
+    findAdjacentSlideMoves(startHex) {
+        const { board } = this.getState();
+
+        // 1. 取得所有相鄰的格子
+        const neighbors = startHex.neighbors();
+
+        // 2. 過濾出有效的移動目標
+        return neighbors.filter(neighbor => {
+            // 目標地點必須是空的 (B棋的堆疊邏輯由 filterMoves 處理)
+            const isTargetEmpty = !board.has(neighbor.toKey());
+            
+            // 必須能夠滑動到該位置 (沒有被兩邊的棋子卡住)
+            const canPhysicallySlide = this.canSlide(startHex, neighbor);
+
+            return isTargetEmpty && canPhysicallySlide;
+        });
+    }
+
     findAllReachableSlideMoves(startHex) {
         const { board } = this.getState();
         const destinations = [];
