@@ -1,4 +1,8 @@
-class Game {
+import Hex from './hex.js';
+import Rules from './rules.js';
+import UI from './ui.js';
+
+export default class Game {
     constructor() {
         this.ui = new UI(this);
         this.rules = new Rules(() => this.state);

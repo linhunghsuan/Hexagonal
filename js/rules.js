@@ -1,4 +1,6 @@
-class Rules {
+import Hex from './hex.js';
+
+export default class Rules {
     constructor(getState) {
         this.getState = getState;
     }
@@ -163,8 +165,6 @@ class Rules {
         }
         switch (type) {
             case 'A':
-                potentialMoves = this.findAdjacentSlideMoves(hex);
-                break;
             case 'B':
                 potentialMoves = this.findAdjacentSlideMoves(hex);
                 break;

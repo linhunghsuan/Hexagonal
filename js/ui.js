@@ -1,4 +1,6 @@
-class UI {
+import Hex from './hex.js'; 
+
+export default class UI {
     constructor(game) {
         this.game = game;
         this.canvas = document.getElementById('gameCanvas');

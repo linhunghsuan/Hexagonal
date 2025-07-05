@@ -1,2 +1,2 @@
-// --- 啟動遊戲 ---
+import Game from './game.js';
 const game = new Game();
